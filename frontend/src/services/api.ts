@@ -1,7 +1,8 @@
 import axios from 'axios';
 import type {
   User, Client, Case, CaseDetail, CaseListResponse,
-  ConflictCheck, Budget, CaseMaterial, LoginResponse, RelatedParty
+  ConflictCheck, Budget, CaseMaterial, MaterialSupplement,
+  LoginResponse, RelatedParty
 } from '../types';
 
 const api = axios.create({
@@ -116,6 +117,25 @@ export const materialApi = {
     is_supplementary?: boolean;
   }) => api.post<CaseMaterial>('/materials', data).then(r => r.data),
   delete: (id: number) => api.delete(`/materials/${id}`).then(r => r.data),
+};
+
+export const materialSupplementApi = {
+  list: (caseId: number, status?: string) =>
+    api.get<MaterialSupplement[]>(`/material-supplements/case/${caseId}`, { params: { status } }).then(r => r.data),
+  get: (id: number) =>
+    api.get<MaterialSupplement>(`/material-supplements/${id}`).then(r => r.data),
+  create: (data: { case_id: number; title: string; description?: string }) =>
+    api.post<MaterialSupplement>('/material-supplements', data).then(r => r.data),
+  update: (id: number, data: Partial<MaterialSupplement>) =>
+    api.put<MaterialSupplement>(`/material-supplements/${id}`, data).then(r => r.data),
+  complete: (id: number, remark?: string) =>
+    api.post<MaterialSupplement>(`/material-supplements/${id}/complete`, null, { params: { remark } }).then(r => r.data),
+  cancel: (id: number) =>
+    api.post<MaterialSupplement>(`/material-supplements/${id}/cancel`).then(r => r.data),
+  delete: (id: number) =>
+    api.delete(`/material-supplements/${id}`).then(r => r.data),
+  getPendingCount: (caseId: number) =>
+    api.get<{ pending_count: number }>(`/material-supplements/case/${caseId}/pending-count`).then(r => r.data),
 };
 
 export default api;

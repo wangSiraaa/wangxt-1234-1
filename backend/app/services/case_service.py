@@ -1,7 +1,7 @@
 from typing import List, Optional
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
-from app.models import Case, CaseStatus, ConflictResult, BudgetStatus
+from app.models import Case, CaseStatus, ConflictResult, BudgetStatus, MaterialSupplement, User
 from app.schemas import CaseCreate, CaseUpdate
 
 
@@ -43,7 +43,17 @@ def create_case(db: Session, case_data: CaseCreate, created_by: int) -> Case:
 
 
 def get_case(db: Session, case_id: int) -> Optional[Case]:
-    return db.query(Case).filter(Case.id == case_id).first()
+    return db.query(Case).options(
+        joinedload(Case.client),
+        joinedload(Case.partner),
+        joinedload(Case.assigned_lawyer),
+        joinedload(Case.related_parties),
+        joinedload(Case.conflict_checks),
+        joinedload(Case.budgets),
+        joinedload(Case.materials),
+        joinedload(Case.material_supplements).joinedload(MaterialSupplement.requester),
+        joinedload(Case.material_supplements).joinedload(MaterialSupplement.completer),
+    ).filter(Case.id == case_id).first()
 
 
 def list_cases(db: Session, skip: int = 0, limit: int = 20, status: Optional[CaseStatus] = None,

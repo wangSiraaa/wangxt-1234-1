@@ -10,10 +10,10 @@ import {
 } from '@chakra-ui/react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
-  caseApi, conflictApi, budgetApi, materialApi, userApi, clientApi
+  caseApi, conflictApi, budgetApi, materialApi, materialSupplementApi, userApi, clientApi
 } from '../services/api';
-import type { CaseDetail } from '../types';
-import { ConflictResult, BudgetStatus, MaterialType, PartyType, UserRole, CaseStatus } from '../types';
+import type { CaseDetail, MaterialSupplement } from '../types';
+import { ConflictResult, BudgetStatus, MaterialType, PartyType, UserRole, CaseStatus, MaterialSupplementStatus } from '../types';
 import { useAuthStore } from '../hooks/useAuthStore';
 import dayjs from 'dayjs';
 
@@ -74,6 +74,18 @@ const materialTypeLabels: Record<MaterialType, string> = {
   other: '其他',
 };
 
+const supplementStatusLabels: Record<MaterialSupplementStatus, string> = {
+  pending: '待补充',
+  completed: '已补齐',
+  cancelled: '已取消',
+};
+
+const supplementStatusColors: Record<MaterialSupplementStatus, string> = {
+  pending: 'orange',
+  completed: 'green',
+  cancelled: 'gray',
+};
+
 export default function CaseDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -98,15 +110,26 @@ export default function CaseDetail() {
   const [materialDesc, setMaterialDesc] = useState('');
   const [isSupplementary, setIsSupplementary] = useState(false);
 
+  const [supplementTitle, setSupplementTitle] = useState('');
+  const [supplementDesc, setSupplementDesc] = useState('');
+  const [completingSupplementId, setCompletingSupplementId] = useState<number | null>(null);
+  const [completeRemark, setCompleteRemark] = useState('');
+
   const conflictModal = useDisclosure();
   const budgetModal = useDisclosure();
   const materialModal = useDisclosure();
+  const supplementModal = useDisclosure();
+  const completeSupplementModal = useDisclosure();
 
   const isPartner = user?.role === UserRole.PARTNER;
   const isRisk = user?.role === UserRole.RISK_CONTROL;
   const isFinance = user?.role === UserRole.FINANCE;
   const isArchived = caseData?.status === 'archived';
   const isRejected = caseData?.status === 'rejected';
+
+  const pendingSupplements = caseData?.material_supplements?.filter(
+    s => s.status === MaterialSupplementStatus.PENDING
+  ) || [];
 
   useEffect(() => {
     fetchCaseDetail();
@@ -237,6 +260,53 @@ export default function CaseDetail() {
     }
   };
 
+  const handleCreateSupplement = async () => {
+    if (!caseData || !supplementTitle) return;
+    try {
+      await materialSupplementApi.create({
+        case_id: caseData.id,
+        title: supplementTitle,
+        description: supplementDesc,
+      });
+      toast({ title: '材料补充要求已发起', status: 'success' });
+      setSupplementTitle('');
+      setSupplementDesc('');
+      supplementModal.onClose();
+      fetchCaseDetail();
+    } catch (err: any) {
+      toast({ title: '发起失败', description: err.response?.data?.detail, status: 'error' });
+    }
+  };
+
+  const handleOpenCompleteSupplement = (supplementId: number) => {
+    setCompletingSupplementId(supplementId);
+    setCompleteRemark('');
+    completeSupplementModal.onOpen();
+  };
+
+  const handleCompleteSupplement = async () => {
+    if (!completingSupplementId) return;
+    try {
+      await materialSupplementApi.complete(completingSupplementId, completeRemark || undefined);
+      toast({ title: '已标记为已补齐', status: 'success' });
+      completeSupplementModal.onClose();
+      setCompletingSupplementId(null);
+      fetchCaseDetail();
+    } catch (err: any) {
+      toast({ title: '操作失败', description: err.response?.data?.detail, status: 'error' });
+    }
+  };
+
+  const handleCancelSupplement = async (supplementId: number) => {
+    try {
+      await materialSupplementApi.cancel(supplementId);
+      toast({ title: '已取消补充要求', status: 'success' });
+      fetchCaseDetail();
+    } catch (err: any) {
+      toast({ title: '取消失败', description: err.response?.data?.detail, status: 'error' });
+    }
+  };
+
   const handleAssignLawyer = async (lawyerId: number) => {
     if (!caseData) return;
     try {
@@ -317,6 +387,19 @@ export default function CaseDetail() {
           )}
         </HStack>
       </Flex>
+
+      {pendingSupplements.length > 0 && (
+        <Box p="4" bg="orange.50" borderWidth="1px" borderColor="orange.200" borderRadius="md">
+          <HStack>
+            <Text color="orange.600" fontWeight="medium">
+              ⚠️ 有 {pendingSupplements.length} 项材料待补充
+            </Text>
+            <Text color="orange.500" fontSize="sm">
+              请尽快补齐相关材料
+            </Text>
+          </HStack>
+        </Box>
+      )}
 
       <SimpleGrid columns={{ base: 1, lg: 2 }} spacing="6">
         <Card>
@@ -441,6 +524,16 @@ export default function CaseDetail() {
             </Flex>
           </CardHeader>
           <CardBody>
+            {pendingSupplements.length > 0 && (
+              <Box p="3" mb="4" bg="orange.50" borderWidth="1px" borderColor="orange.200" borderRadius="md">
+                <Text color="orange.600" fontSize="sm" fontWeight="medium">
+                  ⚠️ 有 {pendingSupplements.length} 项材料待补充
+                </Text>
+                <Text color="orange.500" fontSize="xs" mt="1">
+                  请确认材料是否已补齐后再操作预算
+                </Text>
+              </Box>
+            )}
             {caseData.budget ? (
               <VStack spacing="3" align="stretch">
                 <HStack justify="space-between">
@@ -501,6 +594,82 @@ export default function CaseDetail() {
           </CardBody>
         </Card>
       </SimpleGrid>
+
+      <Card>
+        <CardHeader pb="2">
+          <Flex justify="space-between" align="center">
+            <Heading size="md">材料补充要求</Heading>
+            {isRisk && !isArchived && (
+              <Button size="sm" colorScheme="orange" onClick={supplementModal.onOpen}>
+                发起补充要求
+              </Button>
+            )}
+          </Flex>
+        </CardHeader>
+        <CardBody>
+          {caseData.material_supplements?.length > 0 ? (
+            <VStack spacing="3" align="stretch">
+              {caseData.material_supplements.map((s: MaterialSupplement) => (
+                <Box key={s.id} p="4" borderWidth="1px" borderRadius="md" borderColor="gray.200">
+                  <Flex justify="space-between" align="start" mb="2">
+                    <HStack>
+                      <Text fontWeight="medium">{s.title}</Text>
+                      <Badge colorScheme={supplementStatusColors[s.status]}>
+                        {supplementStatusLabels[s.status]}
+                      </Badge>
+                    </HStack>
+                    <HStack>
+                      {s.status === MaterialSupplementStatus.PENDING && (
+                        <>
+                          <Button
+                            size="xs"
+                            colorScheme="green"
+                            onClick={() => handleOpenCompleteSupplement(s.id)}
+                          >
+                            标记已补齐
+                          </Button>
+                          {isRisk && (
+                            <Button
+                              size="xs"
+                              variant="ghost"
+                              colorScheme="gray"
+                              onClick={() => handleCancelSupplement(s.id)}
+                            >
+                              取消
+                            </Button>
+                          )}
+                        </>
+                      )}
+                    </HStack>
+                  </Flex>
+                  {s.description && (
+                    <Text fontSize="sm" color="gray.600" mb="2">
+                      {s.description}
+                    </Text>
+                  )}
+                  <HStack spacing="4" fontSize="xs" color="gray.400">
+                    <Text>发起人：{s.requester?.name || '-'}</Text>
+                    <Text>发起时间：{dayjs(s.requested_at).format('YYYY-MM-DD HH:mm')}</Text>
+                    {s.completed_at && (
+                      <Text>完成时间：{dayjs(s.completed_at).format('YYYY-MM-DD HH:mm')}</Text>
+                    )}
+                    {s.completer && (
+                      <Text>完成人：{s.completer.name}</Text>
+                    )}
+                  </HStack>
+                  {s.remark && (
+                    <Text fontSize="xs" color="gray.500" mt="2">
+                      备注：{s.remark}
+                    </Text>
+                  )}
+                </Box>
+              ))}
+            </VStack>
+          ) : (
+            <Text color="gray.400">暂无材料补充要求</Text>
+          )}
+        </CardBody>
+      </Card>
 
       <Card>
         <CardHeader pb="2">
@@ -657,6 +826,53 @@ export default function CaseDetail() {
           <ModalFooter>
             <Button variant="ghost" mr="3" onClick={materialModal.onClose}>取消</Button>
             <Button colorScheme="brand" onClick={handleAddMaterial}>添加</Button>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
+
+      <Modal isOpen={supplementModal.isOpen} onClose={supplementModal.onClose} size="xl">
+        <ModalOverlay />
+        <ModalContent>
+          <ModalHeader>发起材料补充要求</ModalHeader>
+          <ModalCloseButton />
+          <ModalBody>
+            <VStack spacing="4">
+              <FormControl isRequired>
+                <FormLabel>补充要求标题</FormLabel>
+                <Input value={supplementTitle} onChange={(e) => setSupplementTitle(e.target.value)}
+                       placeholder="请输入补充要求标题，如：请补充授权委托书" />
+              </FormControl>
+              <FormControl>
+                <FormLabel>详细描述</FormLabel>
+                <Textarea value={supplementDesc} onChange={(e) => setSupplementDesc(e.target.value)}
+                          rows={4} placeholder="请详细描述需要补充的材料内容和要求" />
+              </FormControl>
+            </VStack>
+          </ModalBody>
+          <ModalFooter>
+            <Button variant="ghost" mr="3" onClick={supplementModal.onClose}>取消</Button>
+            <Button colorScheme="orange" onClick={handleCreateSupplement}>发起</Button>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
+
+      <Modal isOpen={completeSupplementModal.isOpen} onClose={completeSupplementModal.onClose} size="md">
+        <ModalOverlay />
+        <ModalContent>
+          <ModalHeader>标记材料已补齐</ModalHeader>
+          <ModalCloseButton />
+          <ModalBody>
+            <VStack spacing="4">
+              <FormControl>
+                <FormLabel>补充说明（可选）</FormLabel>
+                <Textarea value={completeRemark} onChange={(e) => setCompleteRemark(e.target.value)}
+                          rows={3} placeholder="请填写补齐情况说明" />
+              </FormControl>
+            </VStack>
+          </ModalBody>
+          <ModalFooter>
+            <Button variant="ghost" mr="3" onClick={completeSupplementModal.onClose}>取消</Button>
+            <Button colorScheme="green" onClick={handleCompleteSupplement}>确认已补齐</Button>
           </ModalFooter>
         </ModalContent>
       </Modal>

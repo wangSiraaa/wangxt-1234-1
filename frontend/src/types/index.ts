@@ -40,6 +40,12 @@ export enum MaterialType {
   OTHER = 'other',
 }
 
+export enum MaterialSupplementStatus {
+  PENDING = 'pending',
+  COMPLETED = 'completed',
+  CANCELLED = 'cancelled',
+}
+
 export interface User {
   id: number;
   username: string;
@@ -111,6 +117,21 @@ export interface CaseMaterial {
   created_at: string;
 }
 
+export interface MaterialSupplement {
+  id: number;
+  case_id: number;
+  title: string;
+  description?: string;
+  status: MaterialSupplementStatus;
+  requested_by?: number;
+  requested_at: string;
+  completed_at?: string;
+  completed_by?: number;
+  remark?: string;
+  requester?: User;
+  completer?: User;
+}
+
 export interface Case {
   id: number;
   case_number?: string;
@@ -135,6 +156,7 @@ export interface CaseDetail extends Case {
   conflict_check?: ConflictCheck;
   budget?: Budget;
   materials: CaseMaterial[];
+  material_supplements: MaterialSupplement[];
 }
 
 export interface CaseListResponse {

@@ -2,7 +2,7 @@ from datetime import datetime, date
 from typing import Optional, List
 from pydantic import BaseModel, Field
 
-from app.models import UserRole, CaseStatus, ConflictResult, BudgetStatus, PartyType, MaterialType
+from app.models import UserRole, CaseStatus, ConflictResult, BudgetStatus, PartyType, MaterialType, MaterialSupplementStatus
 
 
 class UserBase(BaseModel):
@@ -163,6 +163,38 @@ class CaseMaterialResponse(CaseMaterialBase):
         from_attributes = True
 
 
+class MaterialSupplementBase(BaseModel):
+    title: str
+    description: Optional[str] = None
+
+
+class MaterialSupplementCreate(MaterialSupplementBase):
+    case_id: int
+
+
+class MaterialSupplementUpdate(BaseModel):
+    title: Optional[str] = None
+    description: Optional[str] = None
+    status: Optional[MaterialSupplementStatus] = None
+    remark: Optional[str] = None
+
+
+class MaterialSupplementResponse(MaterialSupplementBase):
+    id: int
+    case_id: int
+    status: MaterialSupplementStatus
+    requested_by: Optional[int] = None
+    requested_at: datetime
+    completed_at: Optional[datetime] = None
+    completed_by: Optional[int] = None
+    remark: Optional[str] = None
+    requester: Optional[UserResponse] = None
+    completer: Optional[UserResponse] = None
+
+    class Config:
+        from_attributes = True
+
+
 class CaseBase(BaseModel):
     case_name: str
     case_type: Optional[str] = None
@@ -208,6 +240,7 @@ class CaseDetailResponse(CaseResponse):
     conflict_check: Optional[ConflictCheckResponse] = None
     budget: Optional[BudgetResponse] = None
     materials: List[CaseMaterialResponse] = []
+    material_supplements: List[MaterialSupplementResponse] = []
 
 
 class CaseListResponse(BaseModel):

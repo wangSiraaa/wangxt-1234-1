@@ -48,6 +48,12 @@ class MaterialType(str, enum.Enum):
     OTHER = "other"
 
 
+class MaterialSupplementStatus(str, enum.Enum):
+    PENDING = "pending"
+    COMPLETED = "completed"
+    CANCELLED = "cancelled"
+
+
 class User(Base):
     __tablename__ = "users"
 
@@ -113,9 +119,6 @@ class Case(Base):
     acceptance_date = Column(Date)
     estimated_end_date = Column(Date)
 
-    conflict_check_id = Column(Integer, ForeignKey("conflict_checks.id"))
-    budget_id = Column(Integer, ForeignKey("budgets.id"))
-
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -123,9 +126,24 @@ class Case(Base):
     partner = relationship("User", foreign_keys=[partner_id])
     assigned_lawyer = relationship("User", foreign_keys=[assigned_lawyer_id])
     related_parties = relationship("RelatedParty", back_populates="case", cascade="all, delete-orphan")
-    conflict_check = relationship("ConflictCheck", back_populates="case", uselist=False)
-    budget = relationship("Budget", back_populates="case", uselist=False)
+    conflict_checks = relationship("ConflictCheck", back_populates="case",
+                                   cascade="all, delete-orphan",
+                                   foreign_keys="ConflictCheck.case_id")
+    budgets = relationship("Budget", back_populates="case",
+                            cascade="all, delete-orphan",
+                            foreign_keys="Budget.case_id")
     materials = relationship("CaseMaterial", back_populates="case", cascade="all, delete-orphan")
+    material_supplements = relationship("MaterialSupplement", back_populates="case", cascade="all, delete-orphan")
+
+    @property
+    def conflict_check(self):
+        checks = sorted(self.conflict_checks, key=lambda c: c.id, reverse=True)
+        return checks[0] if checks else None
+
+    @property
+    def budget(self):
+        items = sorted(self.budgets, key=lambda b: b.id, reverse=True)
+        return items[0] if items else None
 
 
 class ConflictCheck(Base):
@@ -139,7 +157,7 @@ class ConflictCheck(Base):
     checked_by = Column(Integer, ForeignKey("users.id"))
     checked_at = Column(DateTime)
 
-    case = relationship("Case", back_populates="conflict_check")
+    case = relationship("Case", back_populates="conflict_checks")
     checker = relationship("User", foreign_keys=[checked_by])
 
 
@@ -156,7 +174,7 @@ class Budget(Base):
     confirmed_at = Column(DateTime)
     remarks = Column(Text)
 
-    case = relationship("Case", back_populates="budget")
+    case = relationship("Case", back_populates="budgets")
     confirmer = relationship("User", foreign_keys=[confirmed_by])
 
 
@@ -176,3 +194,22 @@ class CaseMaterial(Base):
 
     case = relationship("Case", back_populates="materials")
     uploader = relationship("User", foreign_keys=[uploaded_by])
+
+
+class MaterialSupplement(Base):
+    __tablename__ = "material_supplements"
+
+    id = Column(Integer, primary_key=True, index=True)
+    case_id = Column(Integer, ForeignKey("cases.id"))
+    title = Column(String(200), nullable=False)
+    description = Column(Text)
+    status = Column(Enum(MaterialSupplementStatus), default=MaterialSupplementStatus.PENDING, nullable=False)
+    requested_by = Column(Integer, ForeignKey("users.id"))
+    requested_at = Column(DateTime, default=datetime.utcnow)
+    completed_at = Column(DateTime)
+    completed_by = Column(Integer, ForeignKey("users.id"))
+    remark = Column(Text)
+
+    case = relationship("Case", back_populates="material_supplements")
+    requester = relationship("User", foreign_keys=[requested_by])
+    completer = relationship("User", foreign_keys=[completed_by])

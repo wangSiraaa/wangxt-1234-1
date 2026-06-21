@@ -37,7 +37,6 @@ def create_conflict_check(db: Session, data: ConflictCheckCreate, checked_by: in
         db_case.status = CaseStatus.REJECTED
     else:
         db_case.status = CaseStatus.CONFLICT_CHECKED
-        db_case.conflict_check = db_check
 
     db.commit()
     db.refresh(db_check)
